@@ -6,7 +6,7 @@ use Data::Dumper;
 # regexes for matching individual keys 
 my $key = qr/\S|ESC|SPC|TAB/;
 my $key_chord = qr/(?:[CMS]-)*$key/;
-my $compound_key = qr/^(?:$key_chord\s)+$key_chord/;
+my $compound_key = qr/(?:$key_chord\s)*$key_chord/;
 
 my $emacssym = qr/[\w\-]+/;
 
@@ -15,12 +15,16 @@ sub pd {
 }
 
 sub expand_keybinding {
-    my $key = shift;
-    $key =~ $compound_key or die 'not a compound key';
-    return [$key =~ m/($key_chord)\s?/g];
+    @_ == 1 or die;
+    my $k = shift;
+    ref $k eq q[] or die;
+    defined $k or die;
+    $k =~ $compound_key or die 'not a compound key';
+    return [$k =~ m/($key_chord)\s?/g];
 }
 
 sub convert_binding {
+    @_ == 1 or die;
     my $in = shift;
     my @sequence;
     for my $x (@$in) {
@@ -44,20 +48,35 @@ sub convert_binding {
 }
 
 sub process_line {
+    @_ == 1 or die;
     my $line = shift;
-    $line =~ m/^($compound_key)\t+($emacssym)/;
+    $line =~ m/^\s*($compound_key)\t+($emacssym)/;
     # extract compound key
     my $key = $1;
     my $value = $2;
-    return (defined $key and defined $value) ? 
+
+    do { print "BAD LINE:: $line\n"; return 0 } unless defined $key and defined $value;
+
+    my $expanded = expand_keybinding($key);
+    my $converted = convert_binding($expanded);
+    my $snippet = elisp_snippet($converted, $value);
+    my $test = 
         {
             key => $key,
             value => $value,
             raw => $line,
-            expanded => expand_keybinding($key),
-            converted => convert_binding(expand_keybinding($key)),
-        } 
-    : undef;
+            expanded => $expanded = expand_keybinding($key),
+            converted => $converted = convert_binding($expanded),
+            snippet => elisp_snippet($converted, $value),
+        };
+    return $test;
+}
+
+sub elisp_snippet {
+    @_ == 2 or die;
+    my $keys_ref = shift;
+    my $command = shift;
+    return sprintf q[(define-key 'ig-map (kbd "%s") %s)], "@$keys_ref", $command;
 }
 
 sub filter {
@@ -81,5 +100,7 @@ sub filter {
         }
     }
 }
+
+
 
 filter;

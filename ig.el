@@ -1,5 +1,8 @@
 (require 'cl-lib)
 
+;; symbols that we use
+;; ig-prefix-marker ig-control ig-meta ig-shift
+
 ;; there has to be a better way to test equality for something of depth 1.
 ;; we shall see
 
