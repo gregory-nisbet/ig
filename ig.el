@@ -33,4 +33,5 @@
   ;; insert new function into hash table
   (puthash needle func haystack))
 
+
 (ig-insert '("t" "u") #'recenter-top-bottom ig-table)
