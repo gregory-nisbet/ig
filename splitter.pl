@@ -10,13 +10,11 @@ sub ref_eq {
     $_[0] == $_[1] and return 1;
 }
 
-my $excluded_key_binding = {msg => 'EXCLUDED KEY BINDING'};
-
 # parse keybindings
 # regexes for matching individual keys 
 # does not handle digit argument or keybind ranges
 # TODO handle ranges better
-my $key = qr/\S|ESC|SPC|TAB|RET|left|right|up|down/;
+my $key = qr/[^ \t\n]|ESC|SPC|TAB|RET|left|right|up|down/;
 my $key_chord = qr/(?:[CMS]-)*$key/;
 my $compound_key = qr/<?(?:$key_chord\s)*$key_chord>?/;
 
@@ -37,7 +35,10 @@ sub expand_keybinding {
     ref $k eq q[] or die;
     defined $k or die;
     $k =~ $compound_key or die 'not a compound key';
-    return [$k =~ m/($key_chord)\s?/g];
+
+    printf "%\n", (join " ", $k =~ m/($key_chord)\b/g) if index($k, '@') != -1;
+
+    return [$k =~ m/($key_chord)\b/g];
 }
 
 sub convert_binding {
@@ -45,23 +46,20 @@ sub convert_binding {
     my $in = shift;
     my @sequence;
     for my $x (@$in) {
-        if ($x =~ /^C-g/) {
-            die $excluded_key_binding;
-        }
-        elsif ($x =~ /^C-M-S-($key)/) {
-            push @sequence, "G", "<shift>", $1;
+        if ($x =~ /^C-M-S-($key)/) {
+            push @sequence, qw[ctrl meta shift], $1;
         }
         elsif ($x =~ /^C-M-($key)$/) {
-            push @sequence, "G", $1;
+            push @sequence, qw[ctrl meta], $1;
         }
         elsif ($x =~ /^C-($key)$/) {
-            push @sequence, $1;
+            push @sequence, "ctrl", $1;
         }
         elsif ($x =~ /^M-($key)$/) {
-            push @sequence, "g", $1;
+            push @sequence, "meta", $1;
         }
         elsif ($x =~ /^($key)$/) {
-            push @sequence, "SPC", $1;
+            push @sequence, $1;
         }
         else {
             die 'cannot interpret ' . Dumper $in;
@@ -87,7 +85,6 @@ sub process_line {
         eval {
             my $expanded = expand_keybinding($key);
             my $converted = convert_binding($expanded);
-            my $snippet = elisp_snippet($converted, $value);
             my $test = 
                 {
                     key => $key,
@@ -95,26 +92,15 @@ sub process_line {
                     raw => $line,
                     expanded => $expanded,
                     converted => $converted,
-                    snippet => $snippet, 
                 };
-            printf "%s\n", $snippet;
+            printf "%s -> %s -> %s\n", $key, "@$expanded", "@$converted";
             return $test;
         };
         # catch previous excluded_key_binding
         # comparing $@ pointerwise, not ideal
-        if ($@ and not ref_eq($excluded_key_binding, $@)) {
-            print Dumper($@);
-            die $@;
-        }
     }
 }
 
-sub elisp_snippet {
-    @_ == 2 or die;
-    my $keys_ref = shift;
-    my $command = shift;
-    return sprintf q[(define-key 'ig-map (kbd "%s") %s)], "@$keys_ref", "#'$command";
-}
 
 sub filter {
     my $start_of_section = 0;
@@ -139,5 +125,4 @@ sub filter {
 }
 
 
-print "(define-prefix-command 'ig-map)\n";
 filter;
